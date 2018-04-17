@@ -12,11 +12,11 @@ es = Elasticsearch(['http://10.20.1.21:9200'],chunk_size=1000,timeout=30)
 
 
 mailInfo = {
-        "from": "es-log<support@datahunter.cn>",
-        "to": "wangxiangui@datahunter.cn",
+        "from": "es-log<support@***.cn>",
+        "to": "***@***.cn",
         "hostname": "smtp.exmail.qq.com",
-        "username": "support@datahunter.cn",
-        "password": "6Y5ce9UT5FGD8bch",
+        "username": "*******",
+        "password": "*******",
         "mailencoding": "utf-8"
     }
 class Report(object):
