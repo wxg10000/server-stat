@@ -30,7 +30,8 @@ def getBW():
     return bw
 
 def publish():
-    _es = Elasticsearch(['http://10.20.1.21:9200'],chunk_size=1000,timeout=30)
+    #_es = Elasticsearch(['http://10.20.1.21:9200'],chunk_size=1000,timeout=30)
+    _es = Elasticsearch(['http://eslog.datahunter.cn:80'], http_auth=('eslog', 'DataHunter8'), chunk_size=1000,timeout=30)
 
     while (True):
         # cpu均值

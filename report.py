@@ -7,26 +7,87 @@ import smtplib
 import time
 import os
 import demjson
+import urllib.request
+import json
 
-es = Elasticsearch(['http://10.20.1.21:9200'],chunk_size=1000,timeout=30)
+es = Elasticsearch(['http://eslog.datahunter.cn:80'],http_auth=('eslog','DataHunter8'),chunk_size=1000,timeout=30)
 
 
 mailInfo = {
-        "from": "es-log<support@***.cn>",
-        "to": "***@***.cn",
+        "from": "DataHunter<support@datahunter.cn>",
+        #"to": "sunhui@datahunter.cn,make@datahunter.cn,nick.cheng@datahunter.cn,dengjialong@datahunter.cn,wangxiangui@datahunter.cn",
+        "to": "wangxiangui@datahunter.cn",
         "hostname": "smtp.exmail.qq.com",
-        "username": "*******",
-        "password": "*******",
+        "username": "support@datahunter.cn",
+        "password": "6Y5ce9UT5FGD8bch",
         "mailencoding": "utf-8"
     }
+
+# 获取服务器平台余额
+def getAcount():
+    try:
+        url = "https://api.ucloud.cn/?Action=GetBalance&PublicKey=ucloudsupport%40mrocker.com1392263197892193080&Signature=f138c4830cfce5ff00405167e4aabc8c235491ca"
+        data = urllib.request.urlopen(url).read()
+        account = (json.loads(data))['AccountInfo']['Amount']
+        return account
+    except Exception as e:
+        print(e)
+        return -1
+
+
+# timestamp转时间格式
+def stampToStr(timestamp):
+    # timestamp = 1462451334
+    # 转换成localtime
+    time_local = time.localtime(timestamp)
+    # 转换成新的时间格式(2016-05-05 20:28:54)
+    dt = time.strftime("%Y-%m-%d %H:%M:%S", time_local)
+    return dt
+
+def firewall():
+    try:
+        firewall = "https://api.ucloud.cn/?Action=DescribeSecurityGroup&PublicKey=ucloudsupport%40mrocker.com1392263197892193080&Region=cn-north-03&Signature=83fe5ad712dee325c3c7bd8ddf8e8fe145529936"
+        data = urllib.request.urlopen(firewall).read()
+        print(data)
+        js = json.loads(data)
+        dataSet = js["DataSet"]
+        dataSet.sort(key=lambda x: x["CreateTime"])
+        f = ""
+        for i in range(len(dataSet)):
+            createTime = dataSet[i]["CreateTime"]
+            firewallId = dataSet[i]["FirewallId"]
+            time_point = stampToStr(int(createTime))
+            Rule = dataSet[i]["Rule"]
+            ports = ""
+            for j in range(len(Rule)):
+                port = Rule[j]["DstPort"]
+                ports = ports + ";" + port
+            print(time_point, firewallId, ports[1:])
+
+            f = f + """
+                            <tr>
+                                <td width="100">""" + time_point + """</td>
+                                <td width="100">""" + firewallId + """</td>
+                                <td width="100">""" + ports[1:] + """</td>
+
+                            </tr>"""
+
+        return f
+    except Exception as e:
+        print(e)
+        return ""
+
+
+
 class Report(object):
     def __init__(self):
         print("------------report-------------")
+
     def sendsmtp(self,sub,html):
         try:
-            smtp = smtplib.SMTP(mailInfo["hostname"], 25)
-            smtp.set_debuglevel(1)
-            smtp.ehlo(mailInfo["hostname"])
+
+            smtp = smtplib.SMTP_SSL(mailInfo["hostname"], 465)
+            smtp.ehlo()
             smtp.login(mailInfo["username"], mailInfo["password"])
             msg = MIMEText(html, "html", mailInfo["mailencoding"])
             msg["Subject"] = Header(sub, mailInfo["mailencoding"])
@@ -35,7 +96,8 @@ class Report(object):
             smtp.sendmail(mailInfo["from"], mailInfo["to"].split(','), msg.as_string())
             smtp.quit()
             return True
-        except Exception:
+        except Exception as e:
+            print(e)
             return False
 
     #获取昨天和今天的时间戳值
@@ -70,26 +132,29 @@ class Report(object):
 
     def sendEmail(self):
         today, yesterday = self.getStamps()
-        cmd = "curl -XPOST http://10.20.1.21:9200/_sql -d " \
-              "'select host,max(cpu),avg(cpu),avg(mem),avg(disk),avg(disk_data),max(bw),avg(cpu_count) from server_stat where stamp>=" + str(
-            yesterday) + " and stamp<" + str(today) + "group by host order by avg(disk)'" \
-                                                      " -H 'Content-Type:application/json'"
-
+        cmd = 'curl -u eslog:DataHunter8 -X POST "http://eslog.datahunter.cn/_xpack/sql?format=json" -H \'Content-Type: application/json\' -d\' {"query": "select host,max(cpu),avg(cpu),avg(mem),avg(disk),avg(disk_data),max(bw),avg(cpu_count) from server_stat  where stamp>=\'' + str(
+            yesterday) + '\' and stamp<\'' + str(today) + '\' group by host "}\''
+        print(cmd)
         result = self.execCmd(cmd)
+        # print(result)
         text = demjson.decode(result)
-        buckets = text['aggregations']['host']['buckets']
+        print(text)
+        buckets = text['rows']
+
+        accout = getAcount()
 
         d = ''  # 表格内容
+        f = ''
         for i in range(len(buckets)):
-            host = buckets[i]['key']
-            avg_disk = round(buckets[i]['AVG(disk)']['value'], 2)
-            avg_disk_data = round(buckets[i]['AVG(disk_data)']['value'], 2)
-            max_bw = round(buckets[i]['MAX(bw)']['value'], 2)
-            avg_mem = round(buckets[i]['AVG(mem)']['value'], 2)
-            avg_cpu = round(buckets[i]['AVG(cpu)']['value'], 2)
-            max_cpu = round(buckets[i]['MAX(cpu)']['value'], 2)
-            cpu_count = int(buckets[i]['AVG(cpu_count)']['value'])
-            #print(host, avg_cpu, avg_disk, avg_disk_data, max_bw, max_cpu, avg_mem, cpu_count)
+            host = buckets[i][0]
+            max_cpu = round(buckets[i][1], 2)
+            avg_cpu = round(buckets[i][2], 2)
+            avg_mem = round(buckets[i][3], 2)
+            avg_disk = round(buckets[i][4], 2)
+            avg_disk_data = round(buckets[i][5], 2)
+            max_bw = round(buckets[i][6], 2)
+            cpu_count = int(buckets[i][7])
+            print(host, avg_cpu, avg_disk, avg_disk_data, max_bw, max_cpu, avg_mem, cpu_count)
 
             color1 = 'black'
             color2 = 'black'
@@ -109,13 +174,20 @@ class Report(object):
                         <td width="100">""" + str(max_bw) + """</td>
                         <td width="100">""" + str(cpu_count) + """</td>
                     </tr>"""
+
+        f = f + """
+                <tr>
+                    <td width="100">""" + str(accout) + """</td>
+                    <td width="100">""" + str("") + """</td>
+                </tr>"""
+
         html = """\
             <head>
             <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-            <html>   
+            <html>
             <body>
                  <div id="container">
-                    <p><strong>汇报服务器监测信息:</strong></p>
+                    <p><strong>服务器状态信息:</strong></p>
                     <div id="content">
                         <table width="800" border="2" bordercolor="black" cellspacing="0" cellpadding="0">
                             <tr>
@@ -128,6 +200,25 @@ class Report(object):
                               <td width="100" align="center"><strong>带宽Gbps</strong></td>
                               <td width="100" align="center"><strong>CPU数量</strong></td>
                             </tr>""" + d + """
+                        </table>
+                    </div>
+                    <p><strong>服务器平台余额信息:</strong></p>
+                    <div id="content">
+                        <table width="800" border="2" bordercolor="black" cellspacing="0" cellpadding="0">
+                            <tr>
+                              <td width="100" align="center"><strong>ucloud平台(元)</strong></td>
+                              <td width="100" align="center"><strong>ali平台(元)</strong></td>
+                            </tr>""" + f + """
+                        </table>
+                    </div>
+                    <p><strong>服务器防火墙监测信息:</strong></p>
+                    <div id="content">
+                        <table width="800" border="2" bordercolor="black" cellspacing="0" cellpadding="0">
+                            <tr>
+                              <td width="200" align="center"><strong>创建时间</strong></td>
+                              <td width="200" align="center"><strong>防火墙ID</strong></td>
+                              <td width="400" align="center"><strong>端口</strong></td>
+                            </tr>""" + firewall() + """
                         </table>
                     </div>
                 </div>
@@ -148,20 +239,13 @@ if __name__ == '__main__':
     while n <= 3:
         if report.sendEmail():
             now = datetime.datetime.now()
-            print(now, "发送成功")
+            print(now, "success")
             break
         else:
             now = datetime.datetime.now()
             if n<3:
-                print(now, "第%d次发送失败，5分钟后重试一次" % n)
+                print(now, "The %d times send failed，5 minutes later try again" % n)
             else:
-                print(now,"3次重试发送失败，停止发送！")
+                print(now,"3 retry send failed,stop sending！")
             time.sleep(300)
             n = n+1
-
-
-
-
-
-
-

@@ -1,7 +1,7 @@
 #!/bin/bash
 proc="server_stat"
 pid=`ps -ef|grep $proc |grep -v grep |awk 'NR==1{print $2}'`
-py=`ps -ef|grep $proc |grep -v grep |awk 'NR==1{print $8}'`
+py=`ps -ef|grep $proc |grep -v grep |awk 'NR==1{print $9}'`
 datestamp=$(date +%m-%d-%H:%M)
 
 #if [ -n "$pid" ]; then

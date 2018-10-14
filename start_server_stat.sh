@@ -8,4 +8,4 @@ else
 fi
 sleep 3
 
-/data/stat/anaconda3/bin/python ./server_stat.py eslog 10.20.1.21  &
+python3 ./server_stat.py eslog 10.20.1.21  &
